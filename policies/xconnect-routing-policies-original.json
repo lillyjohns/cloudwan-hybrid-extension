@@ -1,0 +1,1374 @@
+{
+  "description": "Cloud WAN attachment routing policies for TH Prod cross-connect (DX + VPN backup)",
+  "notes": [
+    "Replace placeholders [AWS-TH-ASN], [PROD-WORKLOAD-NO], [SHARED-SERVICE-NO] with actual values",
+    "Example: AWS-TH-ASN = 64520, PROD-WORKLOAD-NO = 100, SHARED-SERVICE-NO = 200",
+    "Non-terminal actions (summarize, prepend-asn-list, add-community, set-local-preference) must come BEFORE terminal actions (allow, drop)",
+    "GLOBAL-DEFAULT: prefix list with min/max=0 matching only 0.0.0.0/0 exactly",
+    "GLOBAL-CATCH-ALL: prefix list matching any IPv4 prefix (implicit deny catch-all)"
+  ],
+  "attachment-routing-policy-rules": [
+    {
+      "rule-number": 200,
+      "description": "Apply BNA-THDX policies to BNA Direct Connect Gateway attachment",
+      "conditions": [
+        {
+          "type": "routing-policy-label",
+          "value": "BNA-THDX"
+        }
+      ],
+      "action": {
+        "associate-routing-policies": [
+          "BNA-THDX-Outbound",
+          "BNA-THDX-Inbound"
+        ]
+      }
+    },
+    {
+      "rule-number": 210,
+      "description": "Apply MTG-THDX policies to MTG Direct Connect Gateway attachment",
+      "conditions": [
+        {
+          "type": "routing-policy-label",
+          "value": "MTG-THDX"
+        }
+      ],
+      "action": {
+        "associate-routing-policies": [
+          "MTG-THDX-Outbound",
+          "MTG-THDX-Inbound"
+        ]
+      }
+    },
+    {
+      "rule-number": 220,
+      "description": "Apply BNA-THPDVPN policies to BNA VPN attachment (backup for DX)",
+      "conditions": [
+        {
+          "type": "routing-policy-label",
+          "value": "BNA-THPDVPN"
+        }
+      ],
+      "action": {
+        "associate-routing-policies": [
+          "BNA-THPDVPN-Outbound",
+          "BNA-THPDVPN-Inbound"
+        ]
+      }
+    },
+    {
+      "rule-number": 230,
+      "description": "Apply MTG-THPDVPN policies to MTG VPN attachment (backup for DX)",
+      "conditions": [
+        {
+          "type": "routing-policy-label",
+          "value": "MTG-THPDVPN"
+        }
+      ],
+      "action": {
+        "associate-routing-policies": [
+          "MTG-THPDVPN-Outbound",
+          "MTG-THPDVPN-Inbound"
+        ]
+      }
+    }
+  ],
+  "routing-policies": [
+    {
+      "routing-policy-name": "BNA-THDX-Outbound",
+      "routing-policy-description": "BNA DX - Outbound - summarize, community, AS prepend",
+      "routing-policy-direction": "outbound",
+      "routing-policy-number": 200,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THDX-THPD-EXCEPTION-DENY-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THDX-THPD-EXCEPTION-ALLOW-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.141.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 201,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[PROD-WORKLOAD-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 202,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 203,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.160.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 301,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[SHARED-SERVICE-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 302,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 303,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "BNA-THDX-Inbound",
+      "routing-policy-description": "BNA DX - Inbound - LP 500 BNA DC, LP 300 MTG DR",
+      "routing-policy-direction": "inbound",
+      "routing-policy-number": 201,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THDX-THPD-EXCEPTION-DENY-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THDX-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "1000"
+            }
+          }
+        },
+        {
+          "rule-number": 121,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THDX-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-BNA-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "500"
+            }
+          }
+        },
+        {
+          "rule-number": 201,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-BNA-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-MTG-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "300"
+            }
+          }
+        },
+        {
+          "rule-number": 301,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-MTG-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "MTG-THDX-Outbound",
+      "routing-policy-description": "MTG DX - Outbound - summarize, community, AS prepend",
+      "routing-policy-direction": "outbound",
+      "routing-policy-number": 210,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THDX-THPD-EXCEPTION-DENY-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THDX-THPD-EXCEPTION-ALLOW-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.141.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 201,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[PROD-WORKLOAD-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 202,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 203,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.160.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 301,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[SHARED-SERVICE-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 302,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 303,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "MTG-THDX-Inbound",
+      "routing-policy-description": "MTG DX - Inbound - LP 300 BNA DC, LP 500 MTG DR",
+      "routing-policy-direction": "inbound",
+      "routing-policy-number": 211,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THDX-THPD-EXCEPTION-DENY-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THDX-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "1000"
+            }
+          }
+        },
+        {
+          "rule-number": 121,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THDX-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-BNA-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "300"
+            }
+          }
+        },
+        {
+          "rule-number": 201,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-BNA-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-MTG-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "500"
+            }
+          }
+        },
+        {
+          "rule-number": 301,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-MTG-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "BNA-THPDVPN-Outbound",
+      "routing-policy-description": "BNA VPN - Outbound - summarize, community, AS prepend (5x PROD, 3x SHRSVC)",
+      "routing-policy-direction": "outbound",
+      "routing-policy-number": 220,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THPDVPN-THPD-EXCEPTION-DENY-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THPDVPN-THPD-EXCEPTION-ALLOW-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.141.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 201,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[PROD-WORKLOAD-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 202,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 203,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.160.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 301,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[SHARED-SERVICE-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 302,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 303,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "BNA-THPDVPN-Inbound",
+      "routing-policy-description": "BNA VPN - Inbound - exception LP 1000, no LP on DC/DR (VPN inherits lower pref)",
+      "routing-policy-direction": "inbound",
+      "routing-policy-number": 221,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THVPN-THPD-EXCEPTION-DENY-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THVPN-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "1000"
+            }
+          }
+        },
+        {
+          "rule-number": 121,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "BNA-THVPN-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-BNA-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-MTG-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "MTG-THPDVPN-Outbound",
+      "routing-policy-description": "MTG VPN - Outbound - summarize, community, AS prepend (5x PROD, 3x SHRSVC)",
+      "routing-policy-direction": "outbound",
+      "routing-policy-number": 230,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THPDVPN-THPD-EXCEPTION-DENY-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THPDVPN-THPD-EXCEPTION-ALLOW-OUT"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.141.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 201,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[PROD-WORKLOAD-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 202,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 203,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-WORKLOAD-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "summarize",
+              "value": "10.160.0.0/16"
+            }
+          }
+        },
+        {
+          "rule-number": 301,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "add-community",
+              "value": "[AWS-TH-ASN]:[SHARED-SERVICE-NO]"
+            }
+          }
+        },
+        {
+          "rule-number": 302,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "prepend-asn-list",
+              "value": "64512 64512 64512"
+            }
+          }
+        },
+        {
+          "rule-number": 303,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "TH-SHARED-SERVICE-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routing-policy-name": "MTG-THPDVPN-Inbound",
+      "routing-policy-description": "MTG VPN - Inbound - exception LP 1000, no LP on DC/DR (VPN inherits lower pref)",
+      "routing-policy-direction": "inbound",
+      "routing-policy-number": 231,
+      "routing-policy-rules": [
+        {
+          "rule-number": 100,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-equals",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 110,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THVPN-THPD-EXCEPTION-DENY-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        },
+        {
+          "rule-number": 120,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THVPN-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "set-local-preference",
+              "value": "1000"
+            }
+          }
+        },
+        {
+          "rule-number": 121,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "MTG-THVPN-THPD-EXCEPTION-ALLOW-IN"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 200,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-BNA-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 300,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-prefix-list",
+                "value": "THPD-MTG-DC-SUMMARY"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "allow"
+            }
+          }
+        },
+        {
+          "rule-number": 900,
+          "rule-definition": {
+            "match-conditions": [
+              {
+                "type": "prefix-in-cidr",
+                "value": "0.0.0.0/0"
+              }
+            ],
+            "condition-logic": "or",
+            "action": {
+              "type": "drop"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

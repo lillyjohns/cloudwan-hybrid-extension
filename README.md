@@ -52,6 +52,7 @@ Key design points:
 | `scripts/generate-router-config.sh` | Renders ready-to-paste VyOS config with real outside IPs + PSKs filled in |
 | `scripts/split-dxgw.sh` | Splits the workshop's shared DXGW into per-DC DXGWs (see below) |
 | `policies/` | Core network policy documents for routing-policy experiments |
+| `docs/routing-policies.md` | **Cloud WAN routing policies (2025.11)** — selective prefix filtering, tested live, with schema gotchas |
 | `docs/routing-tests.md` | Test matrix for routing-policy scenarios |
 
 ## Prerequisites
