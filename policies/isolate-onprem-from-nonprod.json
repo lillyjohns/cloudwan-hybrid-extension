@@ -1,0 +1,41 @@
+{
+  "__comment": "Variant: onprem routes are shared only with prod + sharedservices (nonprod isolated from on-premises). Diff vs baseline: share-with list instead of *.",
+  "version": "2021.12",
+  "core-network-configuration": {
+    "asn-ranges": ["64512-64521"],
+    "edge-locations": [
+      { "location": "us-west-2", "asn": 64512 },
+      { "location": "ap-southeast-2", "asn": 64513 }
+    ]
+  },
+  "segments": [
+    { "name": "nonprod", "require-attachment-acceptance": false },
+    { "name": "prod", "require-attachment-acceptance": false },
+    { "name": "sharedservices", "require-attachment-acceptance": false },
+    { "name": "onprem", "require-attachment-acceptance": false }
+  ],
+  "attachment-policies": [
+    {
+      "rule-number": 100,
+      "conditions": [{ "type": "tag-exists", "key": "segment" }],
+      "action": {
+        "association-method": "tag",
+        "tag-value-of-key": "segment"
+      }
+    }
+  ],
+  "segment-actions": [
+    {
+      "action": "share",
+      "segment": "sharedservices",
+      "mode": "attachment-route",
+      "share-with": "*"
+    },
+    {
+      "action": "share",
+      "segment": "onprem",
+      "mode": "attachment-route",
+      "share-with": ["prod", "sharedservices"]
+    }
+  ]
+}

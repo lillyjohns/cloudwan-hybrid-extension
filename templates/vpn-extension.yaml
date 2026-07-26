@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Cloud WAN hybrid extension - adds a standalone Site-to-Site VPN (Customer
+  Gateway + VPN Connection) and attaches it to an existing Cloud WAN core
+  network segment. Extension of the AWS "Dual-stack global networks with AWS
+  Cloud WAN and AWS Direct Connect" workshop: run once per data center to get
+  a 2x DX + 2x VPN hybrid topology for routing-policy testing.
+
+Parameters:
+  CoreNetworkId:
+    Type: String
+    Description: Existing Cloud WAN core network ID (e.g. core-network-0abc...)
+  CoreNetworkArn:
+    Type: String
+    Description: ARN of the core network (arn:aws:networkmanager::<acct>:core-network/<id>)
+  CustomerGatewayIp:
+    Type: String
+    Description: Public IP of the on-prem router (e.g. DC1 VyOS eth0 public IP)
+  CustomerGatewayAsn:
+    Type: Number
+    Default: 65101
+    Description: BGP ASN of the on-prem router (DC1=65101, DC2=65102 in the workshop)
+  Segment:
+    Type: String
+    Default: onprem
+    Description: Cloud WAN segment to associate via the "segment" tag attachment policy
+  DcName:
+    Type: String
+    Default: dc1
+    Description: Short name used in resource tags (dc1 / dc2)
+  TunnelInsideCidr1:
+    Type: String
+    Default: 169.254.101.0/30
+    Description: Inside CIDR for tunnel 1 (unique per VPN connection)
+  TunnelInsideCidr2:
+    Type: String
+    Default: 169.254.101.4/30
+    Description: Inside CIDR for tunnel 2 (unique per VPN connection)
+
+Resources:
+  CustomerGateway:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      Type: ipsec.1
+      BgpAsn: !Ref CustomerGatewayAsn
+      IpAddress: !Ref CustomerGatewayIp
+      Tags:
+        - Key: Name
+          Value: !Sub '${DcName}-cgw'
+
+  # Standalone VPN connection (no VGW / no TGW) - required for a direct
+  # Cloud WAN SiteToSiteVpnAttachment.
+  VpnConnection:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      Type: ipsec.1
+      CustomerGatewayId: !Ref CustomerGateway
+      VpnTunnelOptionsSpecifications:
+        - TunnelInsideCidr: !Ref TunnelInsideCidr1
+        - TunnelInsideCidr: !Ref TunnelInsideCidr2
+      Tags:
+        - Key: Name
+          Value: !Sub '${DcName}-cwan-vpn'
+
+  # Direct attachment of the VPN into the core network. Segment association
+  # is driven by the core network policy attachment rule on tag key "segment".
+  VpnAttachment:
+    Type: AWS::NetworkManager::SiteToSiteVpnAttachment
+    Properties:
+      CoreNetworkId: !Ref CoreNetworkId
+      VpnConnectionArn: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpn-connection/${VpnConnection}'
+      Tags:
+        - Key: segment
+          Value: !Ref Segment
+        - Key: Name
+          Value: !Sub '${DcName}-cwan-vpn-attachment'
+
+Outputs:
+  CustomerGatewayId:
+    Value: !Ref CustomerGateway
+  VpnConnectionId:
+    Description: Use "aws ec2 describe-vpn-connections" on this ID to get outside IPs + PSKs for the on-prem router config
+    Value: !Ref VpnConnection
+  AttachmentId:
+    Value: !GetAtt VpnAttachment.AttachmentId
+  AttachmentState:
+    Value: !GetAtt VpnAttachment.State
