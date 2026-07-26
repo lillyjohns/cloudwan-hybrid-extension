@@ -2,104 +2,106 @@
 
 An **extension of the AWS workshop** [Dual-stack global networks with AWS Cloud WAN and AWS Direct Connect](https://catalog.us-east-1.prod.workshops.aws/workshops/3d335f4f-0f81-42c0-b093-8ae623511e12/en-US/04-provision-dx/07-verify-connectivity).
 
-The original workshop connects two on-premises data centers (DC1/DC2) to AWS Cloud WAN using **Direct Connect (DX) only**. This extension adds **Site-to-Site VPN attachments** alongside the existing DX attachments, so the final topology has **redundant hybrid paths**:
+The base workshop connects two on-premises data centers (DC1/DC2) to AWS Cloud WAN through a **Direct Connect gateway**. This extension adds **Site-to-Site VPN attachments** alongside, so the final topology has **redundant hybrid paths per DC** — the ideal playground for testing **Cloud WAN routing policies** (path preference, failover, prepending, static overrides) without touching the DX circuits.
 
 ```
-                    ┌──────────────────────────────────────────┐
-                    │        AWS Cloud WAN Core Network        │
-                    │  (us-west-2: ASN 64512 / ap-se-2: 64513) │
-                    │                                          │
-                    │  segments: prod / nonprod /              │
-                    │            sharedservices / onprem       │
-                    └───┬─────────┬──────────────┬─────────┬───┘
-                        │         │              │         │
-                   DX attach  VPN attach    DX attach  VPN attach
-                   (dxgw)     (S2S)         (dxgw)     (S2S)
-                        │         │              │         │
-                    ┌───┴─────────┴───┐      ┌───┴─────────┴───┐
-                    │   DC1 (VyOS)    │──────│   DC2 (VyOS)    │
-                    │   AS 65101      │ DCI  │   AS 65102      │
-                    │   10.1.0.0/16   │      │   10.2.0.0/16   │
-                    └─────────────────┘      └─────────────────┘
+                 ┌─────────────────────────────────────────────────┐
+                 │            AWS Cloud WAN Core Network           │
+                 │      edge us-west-2        edge ap-southeast-2  │
+                 │        ASN 64512               ASN 64513        │
+                 │                                                 │
+                 │   segments: prod / nonprod /                    │
+                 │             sharedservices / onprem             │
+                 └──────┬──────────────┬───────────────┬───────────┘
+                        │              │               │
+              DX GW attachment    VPN attachment   VPN attachment
+                 (onprem)           (onprem)         (onprem)
+                        │              │               │
+               ┌────────┴────────┐    │               │
+               │   DX Gateway    │    │               │
+               │    ASN 65000    │    │               │
+               │ (own BGP ASN —  │    │               │
+               │  separate hop)  │    │               │
+               └───┬─────────┬───┘    │               │
+            transit VIF   transit VIF │               │
+            (DC1, dual-   (DC2, dual- │               │
+             stack BGP)    stack BGP) │               │
+                   │             │    │               │
+              ┌────┴─────┐  ┌────┴────┴─┐             │
+              │DC1 (VyOS)│  │DC2 (VyOS) │─────────────┘
+              │ AS 65101 │──│ AS 65102  │
+              │10.1.0.0/16│DCI│10.2.0.0/16│
+              └──────────┘  └───────────┘
 ```
 
-**Why:** with both DX and VPN attached to the same `onprem` segment, you can test **Cloud WAN routing policies** — path preference, failover, AS-path prepending, and static-route overrides — without touching the physical circuits.
+Note the **DX gateway is its own BGP hop with its own ASN (65000)** — DC routers peer with the DXGW (AS 65000), which then attaches to the core network edges (AS 64512/64513). The VPN attachments terminate **directly on the core network edge ASN** instead. This asymmetry (AS-path via DX: `65000 6451x` vs via VPN: `6451x`) is part of what makes the routing-policy tests interesting.
 
-> Verified working on the live workshop event (July 2026): both IPsec tunnels UP, BGP established with the core network edge (AS 64512), 7 prefixes received over VPN in parallel with DX.
+> Verified on a live workshop event (July 2026): both IPsec tunnels UP, BGP established to the core edge, prefixes received over VPN in parallel with DX.
 
 ## Repo layout
 
 | Path | Purpose |
 |---|---|
+| `deploy.sh` | **One command, zero manual input** — auto-discovers everything and deploys |
 | `templates/vpn-extension.yaml` | CloudFormation: CGW + standalone VPN + Cloud WAN S2S VPN attachment (per DC) |
-| `templates/vpn-extension-cli.sh` | Same as above using pure AWS CLI (works when CFN resource support lags) |
+| `scripts/discover.sh` | Auto-discovery: core network, CGW IPs, ASNs (single core network per account/region assumed, as in the workshop) |
+| `scripts/generate-router-config.sh` | Renders ready-to-paste VyOS config with real outside IPs + PSKs filled in |
 | `policies/` | Core network policy documents for routing-policy experiments |
-| `router-config/` | VyOS configuration for DC1/DC2 routers (IPsec + BGP over VTI) |
-| `docs/routing-tests.md` | Test matrix: how to verify each routing policy scenario |
+| `docs/routing-tests.md` | Test matrix for routing-policy scenarios |
 
 ## Prerequisites
 
-- Completed the workshop through **04 — Provision dual-stack Direct Connect** (DX VIFs BGP up).
-- Cloud WAN core network available (from workshop stack `dxglobal`).
-- Workshop participant role needs additional policies (the default `WSParticipantRole` cannot create VPN resources):
-  - `AmazonEC2FullAccess`
-  - `AmazonVPCFullAccess`
-  - `AWSNetworkManagerFullAccess`
+- Base workshop deployed through **04 — Provision dual-stack Direct Connect** (DX VIFs BGP up).
+- If running as a Workshop Studio participant, `WSParticipantRole` needs: `AmazonEC2FullAccess`, `AmazonVPCFullAccess`, `AWSNetworkManagerFullAccess`.
 
-## Quick start (one DC)
+## Quick start — one command
+
+```bash
+./deploy.sh            # deploys DC1 + DC2 VPNs, waits for AVAILABLE, prints router configs
+./deploy.sh dc1        # or one DC at a time
+```
+
+No IDs to look up: the script discovers the core network (`aws networkmanager list-core-networks` — the workshop has exactly one per account), the on-prem router public IPs, and the DC ASNs, then deploys the CloudFormation stack(s) and renders the VyOS configs into `out/dc1-vyos.conf` / `out/dc2-vyos.conf` with the tunnel PSKs and outside IPs already substituted.
+
+Last manual step is pasting the generated config into each DC router (SSM Session Manager → `dc1-router` / `dc2-router`), which is intentional — the routers simulate customer-managed on-prem gear.
+
+If you prefer raw CloudFormation, the template works standalone too:
 
 ```bash
 aws cloudformation deploy \
   --template-file templates/vpn-extension.yaml \
   --stack-name cwan-vpn-dc1 \
-  --parameter-overrides \
-      CoreNetworkId=core-network-0f1c1de8f20aab19c \
-      CoreNetworkArn=arn:aws:networkmanager::<ACCOUNT_ID>:core-network/core-network-0f1c1de8f20aab19c \
-      CustomerGatewayIp=<DC1_PUBLIC_IP> \
-      CustomerGatewayAsn=65101 \
-      Segment=onprem \
-      TunnelInsideCidr1=169.254.101.0/30 \
-      TunnelInsideCidr2=169.254.101.4/30
+  --parameter-overrides $(scripts/discover.sh dc1 --cfn-params)
 ```
-
-Then configure the on-prem router — see `router-config/dc1-vyos.conf` (fill in the PSKs and outside IPs from the VPN's `CustomerGatewayConfiguration`).
-
-Repeat for DC2 with `CustomerGatewayAsn=65102` and different tunnel CIDRs (e.g. `169.254.102.x`).
 
 ## Verify
 
 ```bash
-# AWS side — both tunnels should be UP with accepted routes
+# AWS side — both tunnels UP with accepted routes
 aws ec2 describe-vpn-connections --vpn-connection-ids <vpn-id> \
   --query 'VpnConnections[0].VgwTelemetry[].{IP:OutsideIpAddress,Status:Status,Routes:AcceptedRouteCount}'
 ```
 
 ```
 # VyOS side
-show vpn ipsec sa          # both peers "up"
-show ip bgp summary        # neighbors 169.254.10x.1 / .5 established (AS 64512)
+show vpn ipsec sa
+show ip bgp summary
 show ip bgp neighbors 169.254.101.1 received-routes
 ```
 
 ## Routing policy experiments
 
-With both DX and VPN in the `onprem` segment, DC prefixes are learned twice by the core network. See [`docs/routing-tests.md`](docs/routing-tests.md) for the full test matrix. Highlights:
+With DX and VPN both in the `onprem` segment, each DC prefix reaches the core network twice via different attachment types. See [`docs/routing-tests.md`](docs/routing-tests.md):
 
-1. **Baseline** — Cloud WAN prefers DX (shorter AS path via DXGW); VPN is standby.
-2. **Failover** — shut the DX VIF on VyOS, watch traffic shift to VPN (`overlay` route change in the core network route table).
-3. **Prefer VPN** — AS-path prepend on the DX BGP session from VyOS.
-4. **Segment isolation / static override** — edit the core network policy documents in `policies/` and apply via `networkmanager put-core-network-policy`.
-
-## Gotchas (learned the hard way)
-
-- **Don't route VPN through a TGW + peering** to reach Cloud WAN — `create-transit-gateway-route-table-attachment` fails silently and intermittently. Use the **direct `SiteToSiteVpnAttachment`** with a standalone VPN connection (no VGW/TGW) instead. Cheaper too.
-- The standalone VPN connection must exist **before** the attachment; attachment tagging (`Key=segment`) drives segment association via the policy's attachment rules.
-- VyOS (equuleus) pairs with AWS VPN defaults using **IKEv1** + AES256/SHA256/DH14. IKEv2 needs extra proposal tuning.
-- Attachment goes `CREATING → PENDING_NETWORK_UPDATE → AVAILABLE` (~5-8 min).
+1. **Baseline** — attachment-type preference: DX gateway attachments beat VPN.
+2. **Failover** — shut the DX BGP session, watch routes shift to the VPN attachment.
+3. **AS-path prepend on DX** — demonstrates that attachment-type preference is evaluated *before* AS-path length.
+4. **Segment isolation** — apply `policies/isolate-onprem-from-nonprod.json`.
+5. **Static route override** — static beats BGP-learned.
 
 ## Cost note
 
-A standalone S2S VPN attachment costs ~$0.05/h (VPN) + Cloud WAN attachment-hours. No TGW required. Delete the stack when done.
+Standalone S2S VPN ≈ $0.05/h + Cloud WAN attachment-hours. No VGW/TGW needed. `./deploy.sh --destroy` removes everything this extension created.
 
 ## License
 
