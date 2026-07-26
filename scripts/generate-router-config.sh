@@ -22,12 +22,12 @@ EDGE_AS=$(aws networkmanager list-core-networks --region "$REGION" \
   aws networkmanager get-core-network --region "$REGION" --core-network-id {} \
   --query "CoreNetwork.Edges[?EdgeLocation=='$REGION']|[0].Asn" --output text)
 
-# Tunnel details
-mapfile -t TUN < <(aws ec2 describe-vpn-connections --region "$REGION" \
+# Tunnel details (bash 3.2 compatible — no mapfile)
+TUN_RAW=$(aws ec2 describe-vpn-connections --region "$REGION" \
   --vpn-connection-ids "$VPN_ID" \
   --query 'VpnConnections[0].Options.TunnelOptions[].[OutsideIpAddress,TunnelInsideCidr,PreSharedKey]' \
   --output text)
-[[ ${#TUN[@]} -eq 2 ]] || { echo "expected 2 tunnels on $VPN_ID" >&2; exit 1; }
+[[ $(echo "$TUN_RAW" | wc -l) -eq 2 ]] || { echo "expected 2 tunnels on $VPN_ID" >&2; exit 1; }
 
 # The router's local (private) address used as IPsec local-address: the
 # workshop routers sit behind 1:1 NAT; VyOS eth0 address is the local-address.
@@ -66,8 +66,7 @@ set vpn ipsec ipsec-interfaces interface eth0
 EOF
 echo
 i=0
-for line in "${TUN[@]}"; do
-  read -r OUTSIDE CIDR PSK <<<"$line"
+while read -r OUTSIDE CIDR PSK; do
   AWS_IP=$(inside_ip "$CIDR" 1)
   MY_IP=$(inside_ip "$CIDR" 2)
   echo "set interfaces vti vti$i address $MY_IP/30"
@@ -87,7 +86,9 @@ for line in "${TUN[@]}"; do
   echo "set protocols bgp $LOCAL_AS neighbor $AWS_IP solo"
   echo
   i=$((i+1))
-done
+done <<EOT
+$TUN_RAW
+EOT
 echo "commit"
 echo "save"
 echo "exit"
