@@ -37,7 +37,7 @@ Key design points:
 - The **VPN attachments terminate directly on the core network edge ASN** (64512/64513) — no intermediate gateway hop.
 - Resulting AS-paths for the same DC prefix: via DX `6500x 6451x`, via VPN `6451x`. Combined with Cloud WAN's attachment-type preference (DX > VPN), this asymmetry is what makes the routing-policy tests interesting.
 
-> Migrating from the shared DXGW: `scripts/split-dxgw.sh` creates the second DXGW, re-associates DC2's transit VIF, and swaps the Cloud WAN DX attachments (see [DX gateway split](#dx-gateway-split)).
+> **How to use this repo:** follow the workshop's section 04 step-by-step with [`docs/workshop-companion.md`](docs/workshop-companion.md) open beside it — it highlights only what changes at each step (two DXGWs instead of one, per-DC ASNs, per-DC attachments), so you arrive at this topology directly instead of completing the workshop first and reworking it. Already finished section 04 as written? Retrofit with `scripts/split-dxgw.sh` (see [DX gateway split](#dx-gateway-split-retrofit-only)).
 
 > Verified on a live workshop event (July 2026): both IPsec tunnels UP, BGP established to the core edge, prefixes received over VPN in parallel with DX.
 
@@ -45,6 +45,7 @@ Key design points:
 
 | Path | Purpose |
 |---|---|
+| `docs/workshop-companion.md` | **Start here** — per-step deltas vs workshop section 04 |
 | `deploy.sh` | **One command, zero manual input** — auto-discovers everything and deploys |
 | `templates/vpn-extension.yaml` | CloudFormation: CGW + standalone VPN + Cloud WAN S2S VPN attachment (per DC) |
 | `scripts/discover.sh` | Auto-discovery: core network, CGW IPs, ASNs (single core network per account/region assumed, as in the workshop) |
@@ -55,7 +56,7 @@ Key design points:
 
 ## Prerequisites
 
-- Base workshop deployed through **04 — Provision dual-stack Direct Connect** (DX VIFs BGP up).
+- Workshop sections 01–03 done (partner orders + Cloud WAN core network up); then follow section 04 with the [companion guide](docs/workshop-companion.md).
 - If running as a Workshop Studio participant, `WSParticipantRole` needs: `AmazonEC2FullAccess`, `AmazonVPCFullAccess`, `AWSNetworkManagerFullAccess`.
 
 ## Quick start — one command
@@ -78,18 +79,16 @@ aws cloudformation deploy \
   --parameter-overrides $(scripts/discover.sh dc1 --cfn-params)
 ```
 
-## DX gateway split
+## DX gateway split (retrofit only)
 
-The base workshop uses **one shared DXGW (ASN 65000)** for both DC transit VIFs. To reach the target diagram (per-DC DXGW with per-DC ASN):
+Only needed if you **already completed section 04 as written** (one shared DXGW, ASN 65000, both VIFs). If you followed the [companion guide](docs/workshop-companion.md), you created per-DC DXGWs at step 04-01 and can skip this. To retrofit:
 
 ```bash
-scripts/split-dxgw.sh            # dry-run: shows current state + planned actions
-scripts/split-dxgw.sh --execute  # creates DXGW2 (ASN 65002) + its Cloud WAN attachment
+scripts/split-dxgw.sh ap-southeast-2            # dry-run: shows current state + plan
+scripts/split-dxgw.sh ap-southeast-2 --execute  # DXGW2 + attachment + VIF recreate
 ```
 
-One step cannot be fully automated: a **transit VIF is bound to its DXGW at creation** and cannot be re-associated, so DC2's VIF must be deleted and re-ordered against DXGW2 through the workshop's *Direct Connect partner orders* page (same VLAN/BGP parameters — the script prints them). The only router-side change is `remote-as 65002` on dc2-router's AWS neighbors.
-
-If you're building from scratch outside Workshop Studio, simply order each DC's transit VIF against its own DXGW from the start and this section doesn't apply.
+Verified on a live event (~10 min end-to-end): the script creates DXGW2 (ASN 65002) and its Cloud WAN attachment, then deletes DC2's transit VIF and recreates it on DXGW2 with identical VLAN/IPv4 BGP parameters (VIFs can't move between DXGWs, and each workshop DX connection allows only one VIF, so the script waits out the ~3-minute deletion). The IPv6 peer gets **new auto-assigned addresses** — the script prints the router-side changes needed (`remote-as 65002` + updated v6 address/neighbor/password on dc2-router).
 
 ## Verify
 
